@@ -1,70 +1,147 @@
-# Getting Started with Create React App
+# React Frontend - IP Geolocation App
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A React application for IP geolocation lookup with authentication, search history, and interactive maps.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+### ✅ Core Features
 
-### `npm start`
+1. **Authentication System**
+   - Login page with email and password validation
+   - Automatic redirect based on login status
+   - Session persistence using Sanctum tokens
+   - Logout functionality
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+2. **IP Geolocation Lookup**
+   - Display current user's IP and geolocation information on app load
+   - Search for any IP address and view its geolocation data
+   - IP address validation (IPv4 and IPv6)
+   - Error handling for invalid IP addresses
+   - Clear button to reset to user's own IP
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+3. **Search History**
+   - Automatically saves search history to database via API
+   - Displays list of previous searches with IP, location, and timestamp
+   - Click on history items to reload geo information instantly
+   - Checkboxes to select multiple history entries
+   - Delete selected history entries with confirmation
+   - Select All functionality
 
-### `npm test`
+4. **Interactive Map** 🗺️ (Big Plus Feature)
+   - Displays map with exact location pin for the IP address
+   - Uses Leaflet with OpenStreetMap
+   - Shows popup with IP and location details when clicking marker
+   - Updates automatically when searching new IPs or clicking history items
+   - Instant map updates when clicking history items
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Installation
 
-### `npm run build`
+### Prerequisites
+- Node.js (v14 or higher)
+- npm or yarn
+- Backend API running on `http://localhost:8000` (see backend repository)
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### Setup
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+1. Clone the repository:
+```bash
+git clone https://github.com/wchesedh/react-frontend.git
+cd react-frontend
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+2. Install dependencies:
+```bash
+npm install
+```
 
-### `npm run eject`
+### External Libraries Used
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+All dependencies are listed in `package.json`. Key libraries:
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+- **axios** (^1.13.2) - For HTTP requests
+- **react-router-dom** (^7.9.6) - For routing
+- **leaflet** (^1.9.4) - For map functionality
+- **react-leaflet** (^5.0.0) - React wrapper for Leaflet
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+Installation command:
+```bash
+npm install axios react-router-dom leaflet react-leaflet
+```
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## Running the Application
 
-## Learn More
+```bash
+npm start
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+The app will start on `http://localhost:3000` (or next available port).
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+**Important**: Make sure the Laravel API backend is running on `http://localhost:8000` before starting the frontend.
 
-### Code Splitting
+## API Endpoints
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+The frontend connects to the Laravel API backend. See the backend repository for API documentation.
 
-### Analyzing the Bundle Size
+### Backend Repository
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+**API Backend**: The Laravel backend is in a separate repository. Make sure to:
+1. Clone and set up the backend repository
+2. Run migrations and seeders
+3. Start the backend server on `http://localhost:8000`
+4. Then start this React frontend
 
-### Making a Progressive Web App
+## Project Structure
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+```
+src/
+├── components/
+│   ├── Login.js          # Login page component
+│   ├── Login.css         # Login styles
+│   ├── Home.js           # Home page with IP lookup
+│   ├── Home.css          # Home styles
+│   └── IPMap.js          # Map component (Leaflet)
+├── context/
+│   └── AuthContext.js    # Authentication context
+├── App.js                # Main app with routing
+├── App.css               # Global styles
+└── index.js              # Entry point
+```
 
-### Advanced Configuration
+## Features Checklist
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+- ✅ Login form with email and password
+- ✅ API integration with backend login endpoint
+- ✅ Automatic redirect on app load based on auth status
+- ✅ Display current user IP and geolocation on home screen
+- ✅ IP address input with validation
+- ✅ Error messages for invalid IPs
+- ✅ Clear button to reset to user IP
+- ✅ Search history stored in database via API
+- ✅ History list display
+- ✅ Click history items to reload geo info (instant)
+- ✅ Checkboxes for multiple selection
+- ✅ Select All functionality
+- ✅ Delete selected history entries with confirmation
+- ✅ Interactive map with location pinning (Big Plus)
+- ✅ Instant map updates
+- ✅ Active item highlighting
 
-### Deployment
+## Layout
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+- **Top**: IP Information card (full width)
+- **Below**: Search form (full width)
+- **Bottom Row**: 
+  - Left (1/3): Search History
+  - Right (2/3): Location Map
 
-### `npm run build` fails to minify
+## Notes
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- Make sure the backend API is running on `http://localhost:8000` for login to work
+- The map uses OpenStreetMap tiles (free, no API key required)
+- Search history is limited to 50 most recent entries
+- Authentication uses Laravel Sanctum tokens stored in localStorage
+- All API calls include authentication token in headers
+
+## License
+
+This project is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
