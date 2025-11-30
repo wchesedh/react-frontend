@@ -10,6 +10,7 @@ function Home() {
   const [inputIp, setInputIp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [history, setHistory] = useState([]);
   const [selectedHistory, setSelectedHistory] = useState([]);
   const [activeIpId, setActiveIpId] = useState(null);
@@ -26,9 +27,19 @@ function Home() {
 
   // Load history from API on mount
   useEffect(() => {
-    loadHistory();
-    // Fetch current user IP on mount
-    fetchIpInfo();
+    const initializeData = async () => {
+      setInitialLoading(true);
+      try {
+        // Load both in parallel for faster initialization
+        await Promise.all([
+          loadHistory(),
+          fetchIpInfo('', null, true) // Skip loading state during initial load
+        ]);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    initializeData();
   }, []);
 
   const loadHistory = async () => {
@@ -317,6 +328,22 @@ function Home() {
     logout();
     navigate('/login');
   };
+
+  // Show loading state until initial data is ready
+  if (initialLoading) {
+    return (
+      <div className="home-container">
+        <div className="home-header">
+          <h1>IP Geolocation Lookup</h1>
+          <button onClick={handleLogout} className="logout-button">Logout</button>
+        </div>
+        <div className="home-loading">
+          <div className="loading-spinner"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="home-container">
