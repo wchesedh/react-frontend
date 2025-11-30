@@ -27,7 +27,7 @@ A React application for IP geolocation lookup with authentication, search histor
    - Delete selected history entries with confirmation
    - Select All functionality
 
-4. **Interactive Map** 🗺️ (Big Plus Feature)
+4. **Interactive Map** 🗺️ 
    - Displays map with exact location pin for the IP address
    - Uses Leaflet with OpenStreetMap
    - Shows popup with IP and location details when clicking marker
