@@ -86,6 +86,29 @@
   display: flex;
   gap: 0.5rem;
   margin-bottom: 0.8rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 576px) {
+  .search-section {
+    padding: 0.8rem;
+  }
+  
+  .input-group {
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  
+  .ip-input,
+  .search-button,
+  .clear-button {
+    width: 100%;
+  }
+  
+  .search-button,
+  .clear-button {
+    min-width: auto;
+  }
 }
 
 .ip-input {
@@ -110,6 +133,11 @@
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
+  white-space: nowrap;
+  min-width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .search-button {
@@ -264,10 +292,28 @@
   font-size: 0.8rem;
   transition: background 0.2s;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
 }
 
-.delete-button:hover {
+.delete-button:hover:not(:disabled) {
   background: #b71c1c;
+}
+
+.delete-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner-small {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
 }
 
 .history-list {

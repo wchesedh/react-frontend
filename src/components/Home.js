@@ -11,6 +11,7 @@ function Home() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [history, setHistory] = useState([]);
   const [selectedHistory, setSelectedHistory] = useState([]);
   const [activeIpId, setActiveIpId] = useState(null);
@@ -30,11 +31,10 @@ function Home() {
     const initializeData = async () => {
       setInitialLoading(true);
       try {
-        // Load both in parallel for faster initialization
-        await Promise.all([
-          loadHistory(),
-          fetchIpInfo('', null, true) // Skip loading state during initial load
-        ]);
+        // Load history first
+        await loadHistory();
+        // Then fetch user's IP without saving to history
+        await fetchIpInfo('', null, true, true); // Skip loading and skip history save
       } finally {
         setInitialLoading(false);
       }
@@ -45,7 +45,18 @@ function Home() {
   const loadHistory = async () => {
     try {
       const response = await axios.get('http://localhost:8000/api/ip-history');
-      setHistory(response.data);
+      // Ensure all items have proper structure
+      const cleanHistory = (response.data || []).map(item => ({
+        id: item.id,
+        ip: item.ip,
+        city: item.city || 'Unknown',
+        region: item.region || 'Unknown',
+        country: item.country || 'Unknown',
+        loc: item.loc,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+      }));
+      setHistory(cleanHistory);
     } catch (err) {
       console.error('Failed to load history:', err);
       // Fallback to empty array if API fails
@@ -66,21 +77,67 @@ function Home() {
       // Update the history item with the real ID from database
       if (response.data && response.data.id) {
         setHistory(prev => {
+          // Find item by IP (works for both temp ID and existing items)
           const existingIndex = prev.findIndex(item => item.ip === historyItem.ip);
           if (existingIndex >= 0) {
             const updated = [...prev];
-            updated[existingIndex] = {
-              ...updated[existingIndex],
-              id: response.data.id,
-              created_at: updated[existingIndex].created_at || new Date().toISOString(),
-            };
-            return updated;
+            // Only update if we're replacing a temp ID or if IDs match
+            const currentItem = updated[existingIndex];
+            const isTempId = typeof currentItem.id === 'number' && currentItem.id >= 1000000000000;
+            
+            if (isTempId || currentItem.id === response.data.id) {
+              updated[existingIndex] = {
+                ...currentItem,
+                id: response.data.id, // Always use real ID from database
+                created_at: currentItem.created_at || new Date().toISOString(),
+              };
+              return updated;
+            }
           }
           return prev;
         });
-      } else {
-        // Reload history if no ID returned (shouldn't happen, but fallback)
-        loadHistory();
+        
+        // Update active IP ID if it was a temporary one
+        setActiveIpId(prevId => {
+          if (typeof prevId === 'number' && prevId >= 1000000000000) {
+            // It's a temp ID, check if it matches the item we just saved
+            const tempItem = history.find(item => item.id === prevId && item.ip === historyItem.ip);
+            if (tempItem) {
+              return response.data.id;
+            }
+          }
+          return prevId;
+        });
+      } else if (response.data && response.data.message === 'History updated' && response.data.id) {
+        // Item was updated (existing item), update the ID in state
+        setHistory(prev => {
+          const existingIndex = prev.findIndex(item => item.ip === historyItem.ip);
+          if (existingIndex >= 0) {
+            const updated = [...prev];
+            // Update with real ID if it was a temp ID
+            const currentItem = updated[existingIndex];
+            const isTempId = typeof currentItem.id === 'number' && currentItem.id >= 1000000000000;
+            if (isTempId || !currentItem.id) {
+              updated[existingIndex] = {
+                ...currentItem,
+                id: response.data.id,
+              };
+              return updated;
+            }
+          }
+          return prev;
+        });
+        
+        // Update active IP ID if it was a temporary one
+        setActiveIpId(prevId => {
+          if (typeof prevId === 'number' && prevId >= 1000000000000) {
+            const tempItem = history.find(item => item.id === prevId && item.ip === historyItem.ip);
+            if (tempItem) {
+              return response.data.id;
+            }
+          }
+          return prevId;
+        });
       }
     } catch (err) {
       console.error('Failed to save history:', err);
@@ -109,7 +166,7 @@ function Home() {
     return true;
   };
 
-  const fetchIpInfo = async (ip = '', historyItemId = null, skipLoading = false) => {
+  const fetchIpInfo = async (ip = '', historyItemId = null, skipLoading = false, skipHistorySave = false) => {
     setError('');
     
     // Set active IP ID immediately for instant visual feedback
@@ -144,40 +201,45 @@ function Home() {
           loc: response.data.loc || null,
         };
         
-        // Add to history immediately (optimistic update) - only if not from history click
-        if (!historyItemId) {
-          const existingIndex = history.findIndex(item => item.ip === historyItem.ip);
+        // Only add to history if not skipping history save and not from history click
+        if (!skipHistorySave && !historyItemId) {
           const tempId = Date.now(); // Temporary ID until API responds
           
-          if (existingIndex >= 0) {
-            // Update existing item in place (don't move to top)
-            setHistory(prev => {
+          setHistory(prev => {
+            const existingIndex = prev.findIndex(item => item.ip === historyItem.ip);
+            
+            if (existingIndex >= 0) {
+              // Update existing item in place (don't move to top)
               const updated = [...prev];
               updated[existingIndex] = {
                 ...updated[existingIndex],
                 ...historyItem,
                 updated_at: new Date().toISOString(),
               };
+              // Set active ID to the existing item's ID
+              setActiveIpId(updated[existingIndex].id);
               return updated;
-            });
-            setActiveIpId(history[existingIndex].id);
-          } else {
-            // Add new item at the beginning
-            const newHistoryItem = {
-              id: tempId,
-              ...historyItem,
-              created_at: new Date().toISOString(),
-            };
-            setHistory(prev => [newHistoryItem, ...prev]);
-            setActiveIpId(tempId);
-          }
-        } else {
+            } else {
+              // Add new item at the beginning
+              const newHistoryItem = {
+                id: tempId,
+                ...historyItem,
+                created_at: new Date().toISOString(),
+              };
+              setActiveIpId(tempId);
+              return [newHistoryItem, ...prev];
+            }
+          });
+          
+          // Save to API in background and update with real ID
+          saveHistoryToAPI(historyItem).catch(err => console.error('History save error:', err));
+        } else if (historyItemId) {
           // From history click, just set active ID
           setActiveIpId(historyItemId);
+        } else if (skipHistorySave) {
+          // Initial load - don't set active ID, just display the IP info
+          setActiveIpId(null);
         }
-        
-        // Save to API in background and update with real ID
-        saveHistoryToAPI(historyItem).catch(err => console.error('History save error:', err));
       } else {
         throw new Error('Invalid response from IP service');
       }
@@ -277,39 +339,84 @@ function Home() {
   };
 
   const handleSelectAll = () => {
-    if (selectedHistory.length === history.length) {
+    // Only select items with valid database IDs (not temporary IDs)
+    const validItems = history.filter(item => item.id && typeof item.id === 'number' && item.id < 1000000000000);
+    const validIds = validItems.map(item => item.id);
+    
+    // Check if all valid items are selected
+    const allSelected = validIds.length > 0 && validIds.every(id => selectedHistory.includes(id));
+    
+    if (allSelected) {
       // Deselect all
       setSelectedHistory([]);
     } else {
-      // Select all
-      setSelectedHistory(history.map(item => item.id));
+      // Select all valid items
+      setSelectedHistory(validIds);
     }
   };
 
   const handleDeleteSelected = async () => {
-    if (selectedHistory.length === 0) return;
+    if (selectedHistory.length === 0 || deleting) return;
+    
+    // Filter out temporary IDs (timestamps) - only delete items with real database IDs
+    const validIds = selectedHistory.filter(id => {
+      // Real database IDs are typically smaller integers, temp IDs are timestamps (large numbers)
+      return typeof id === 'number' && id < 1000000000000;
+    });
+    
+    if (validIds.length === 0) {
+      // All selected items are temporary, just remove them from state
+      setHistory(prev => prev.filter(item => !selectedHistory.includes(item.id)));
+      setSelectedHistory([]);
+      return;
+    }
     
     // Show confirmation alert
-    const confirmMessage = selectedHistory.length === 1
+    const confirmMessage = validIds.length === 1
       ? 'Are you sure you want to delete this history item?'
-      : `Are you sure you want to delete ${selectedHistory.length} history items?`;
+      : `Are you sure you want to delete ${validIds.length} history item(s)?`;
     
     if (!window.confirm(confirmMessage)) {
       return; // User cancelled
     }
     
+    setDeleting(true);
+    
+    // Get IPs of items being deleted for cleanup
+    const itemsToDelete = history.filter(item => validIds.includes(item.id));
+    const deletedIps = itemsToDelete.map(item => item.ip);
+    const wasActiveIpDeleted = validIds.includes(activeIpId);
+    
     try {
+      // Delete from API
       await axios.delete('http://localhost:8000/api/ip-history', {
-        data: { ids: selectedHistory }
+        data: { ids: validIds }
       });
-      // Reload history
-      loadHistory();
+      
+      // Optimistically update state - remove deleted items immediately
+      setHistory(prev => prev.filter(item => !validIds.includes(item.id)));
       setSelectedHistory([]);
+      
+      // Clear active IP if it was deleted
+      if (wasActiveIpDeleted) {
+        setActiveIpId(null);
+        // If the deleted IP was currently displayed, fetch user's IP
+        if (ipInfo && deletedIps.includes(ipInfo.ip)) {
+          fetchIpInfo();
+        }
+      }
+      
+      // Reload history to ensure sync with server (in case of any discrepancies)
+      await loadHistory();
     } catch (err) {
       console.error('Failed to delete history:', err);
+      // Reload history on error to restore correct state
+      await loadHistory();
       const errorMsg = err.response?.data?.message || err.message || 'Failed to delete history items';
       setError(typeof errorMsg === 'string' ? errorMsg : 'Failed to delete history items');
       alert('Failed to delete history items. Please try again.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -437,38 +544,60 @@ function Home() {
                 <div className="history-header">
                   <div className="history-header-left">
                     <h2>Search History</h2>
-                    {history.length > 0 && (
-                      <label className="select-all-label">
-                        <input
-                          type="checkbox"
-                          checked={selectedHistory.length === history.length}
-                          onChange={handleSelectAll}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <span>Select All</span>
-                      </label>
-                    )}
+                    {history.length > 0 && (() => {
+                      const validItems = history.filter(item => item.id && typeof item.id === 'number' && item.id < 1000000000000);
+                      const validIds = validItems.map(item => item.id);
+                      const allSelected = validIds.length > 0 && validIds.every(id => selectedHistory.includes(id));
+                      return (
+                        <label className="select-all-label">
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={handleSelectAll}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <span>Select All</span>
+                        </label>
+                      );
+                    })()}
                   </div>
                   {selectedHistory.length > 0 && (
-                    <button onClick={handleDeleteSelected} className="delete-button">
-                      Delete ({selectedHistory.length})
+                    <button 
+                      onClick={handleDeleteSelected} 
+                      className="delete-button"
+                      disabled={deleting}
+                    >
+                      {deleting ? (
+                        <>
+                          <span className="spinner-small"></span>
+                          Deleting...
+                        </>
+                      ) : (
+                        `Delete (${selectedHistory.length})`
+                      )}
                     </button>
                   )}
                 </div>
                 {history.length > 0 ? (
                   <div className="history-list">
-                    {history.map((item, index) => (
+                    {history.map((item) => {
+                      // Use stable key - prefer ID, fallback to IP if no ID yet
+                      const itemKey = item.id ? `id-${item.id}` : `ip-${item.ip}`;
+                      return (
                       <div 
-                        key={`${item.id || item.ip}-${index}`} 
+                        key={itemKey}
                         className={`history-item ${selectedHistory.includes(item.id) ? 'selected' : ''} ${activeIpId === item.id ? 'active' : ''}`}
                       >
                         <div className="history-checkbox-wrapper">
                           <input
                             type="checkbox"
-                            checked={selectedHistory.includes(item.id)}
+                            checked={item.id && selectedHistory.includes(item.id)}
+                            disabled={!item.id || (typeof item.id === 'number' && item.id >= 1000000000000)}
                             onChange={(e) => {
                               e.stopPropagation();
-                              handleHistoryCheckbox(item.id);
+                              if (item.id) {
+                                handleHistoryCheckbox(item.id);
+                              }
                             }}
                             onClick={(e) => e.stopPropagation()}
                           />
@@ -486,7 +615,8 @@ function Home() {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="history-empty">
@@ -508,56 +638,79 @@ function Home() {
             <div className="history-header">
               <div className="history-header-left">
                 <h2>Search History</h2>
-                {history.length > 0 && (
-                  <label className="select-all-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedHistory.length === history.length}
-                      onChange={handleSelectAll}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <span>Select All</span>
-                  </label>
-                )}
+                {history.length > 0 && (() => {
+                  const validItems = history.filter(item => item.id && typeof item.id === 'number' && item.id < 1000000000000);
+                  const validIds = validItems.map(item => item.id);
+                  const allSelected = validIds.length > 0 && validIds.every(id => selectedHistory.includes(id));
+                  return (
+                    <label className="select-all-label">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={handleSelectAll}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <span>Select All</span>
+                    </label>
+                  );
+                })()}
               </div>
               {selectedHistory.length > 0 && (
-                <button onClick={handleDeleteSelected} className="delete-button">
-                  Delete ({selectedHistory.length})
+                <button 
+                  onClick={handleDeleteSelected} 
+                  className="delete-button"
+                  disabled={deleting}
+                >
+                  {deleting ? (
+                    <>
+                      <span className="spinner-small"></span>
+                      Deleting...
+                    </>
+                  ) : (
+                    `Delete (${selectedHistory.length})`
+                  )}
                 </button>
               )}
             </div>
             {history.length > 0 ? (
               <div className="history-list">
-                {history.map((item, index) => (
-                  <div 
-                    key={`${item.id || item.ip}-${index}`} 
-                    className={`history-item ${selectedHistory.includes(item.id) ? 'selected' : ''} ${activeIpId === item.id ? 'active' : ''}`}
-                  >
-                    <div className="history-checkbox-wrapper">
-                      <input
-                        type="checkbox"
-                        checked={selectedHistory.includes(item.id)}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          handleHistoryCheckbox(item.id);
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
+                {history.map((item) => {
+                  // Use stable key - prefer ID, fallback to IP if no ID yet
+                  const itemKey = item.id ? `id-${item.id}` : `ip-${item.ip}`;
+                  return (
                     <div 
-                      className="history-content"
-                      onClick={() => handleHistoryClick(item)}
+                      key={itemKey}
+                      className={`history-item ${selectedHistory.includes(item.id) ? 'selected' : ''} ${activeIpId === item.id ? 'active' : ''}`}
                     >
-                      <div className="history-ip">{item.ip}</div>
-                      <div className="history-location">
-                        {item.city}, {item.region}, {item.country}
+                      <div className="history-checkbox-wrapper">
+                        <input
+                          type="checkbox"
+                          checked={item.id && selectedHistory.includes(item.id)}
+                          disabled={!item.id || (typeof item.id === 'number' && item.id >= 1000000000000)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            if (item.id) {
+                              handleHistoryCheckbox(item.id);
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
                       </div>
-                      <div className="history-time">
-                        {new Date(item.created_at || item.timestamp).toLocaleString()}
+                      <div 
+                        className="history-content"
+                        onClick={() => handleHistoryClick(item)}
+                      >
+                        <div className="history-ip">{item.ip}</div>
+                        <div className="history-location">
+                          {item.city}, {item.region}, {item.country}
+                        </div>
+                        <div className="history-time">
+                          {new Date(item.created_at || item.timestamp).toLocaleString()}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="history-empty">
